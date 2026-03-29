@@ -1,2 +1,6 @@
-# BierSkyDrop Konfiguration
-# Aktuell nicht benötigt, da Einstellungen im Code oder im GUI gespeichert werden.
+# Zeit in STUNDEN, die ein Spieler warten muss, bis er den Drop wieder abholen kann.
+# Beispiele:
+# 24 = 1 Tag
+# 168 = 1 Woche (7 * 24)
+# 720 = 1 Monat (30 * 24)
+cooldown-hours: 24

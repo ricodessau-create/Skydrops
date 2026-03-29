@@ -56,8 +56,12 @@ public class DropManager {
     public boolean canClaim(UUID uuid) {
         long last = cooldowns.getOrDefault(uuid, 0L);
         long now = System.currentTimeMillis();
-        // 24 Stunden = 86400000 ms
-        return (now - last) > 86400000;
+        
+        // Liest die Stunden aus der Config und rechnet sie in Millisekunden um
+        long hours = plugin.getConfig().getLong("cooldown-hours", 24);
+        long cooldownMs = hours * 60 * 60 * 1000;
+        
+        return (now - last) > cooldownMs;
     }
 
     public void setCooldown(UUID uuid) {
@@ -81,7 +85,6 @@ public class DropManager {
 
             boolean isHead = poolItem.getType() == Material.PLAYER_HEAD;
             
-            // Wenn es ein Kopf ist und wir schon einen haben -> skip
             if (isHead && headUsed) continue;
 
             ItemStack reward = poolItem.clone();
@@ -90,7 +93,6 @@ public class DropManager {
                 reward.setAmount(1);
                 headUsed = true;
             } else {
-                // Menge 1 bis 5
                 int amount = new Random().nextInt(5) + 1;
                 reward.setAmount(amount);
             }

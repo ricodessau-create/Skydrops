@@ -27,15 +27,14 @@ public class ChestSpawner {
         
         // FallingBlock spawn
         FallingBlock fb = spawnLoc.getWorld().spawnFallingBlock(spawnLoc, Material.CHEST.createBlockData());
-        fb.setDropItem(false); // Kein Chest Item droppen, wenn er kaputt geht
+        fb.setDropItem(false);
         
-        // Wir müssen tracken, wann er aufschlägt
         new FallTracker(fb, targetLoc.getBlock(), loot).runTaskTimer(plugin, 1L, 1L);
     }
 
     private class FallTracker extends BukkitRunnable {
         private final FallingBlock fb;
-        private final Block targetBlock;
+        private Block targetBlock; // HIER 'final' ENTFERNT
         private final List<ItemStack> loot;
 
         public FallTracker(FallingBlock fb, Block targetBlock, List<ItemStack> loot) {
@@ -47,18 +46,18 @@ public class ChestSpawner {
         @Override
         public void run() {
             if (fb.isDead()) {
-                // Ist aufgeschlagen
                 placeChest();
                 cancel();
             }
         }
 
         private void placeChest() {
-            // Block setzen
+            // Wenn Block fest ist, eins drüber setzen
             if (targetBlock.getType().isSolid()) {
                 targetBlock = targetBlock.getLocation().add(0, 1, 0).getBlock();
             }
             
+            // Block setzen
             targetBlock.setType(Material.CHEST);
             
             if (targetBlock.getState() instanceof Chest chest) {

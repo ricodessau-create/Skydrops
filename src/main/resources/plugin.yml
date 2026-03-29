@@ -1,0 +1,11 @@
+name: BierSkyDrop
+version: 1.0
+main: de.bierrang.plugin.BierSkyDrop
+api-version: '1.21'
+commands:
+  skydrop:
+    description: Hauptbefehl
+    usage: /skydrop
+permissions:
+  skydrop.admin:
+    default: op

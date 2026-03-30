@@ -21,6 +21,11 @@ public class BierSkyDrop extends JavaPlugin {
         getLogger().info("BierSkyDrop geladen!");
     }
 
-    public static BierSkyDrop getInstance() { return instance; }
-    public DropManager getDropManager() { return dropManager; }
+    public static BierSkyDrop getInstance() {
+        return instance;
+    }
+
+    public DropManager getDropManager() {
+        return dropManager;
+    }
 }

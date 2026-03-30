@@ -23,7 +23,6 @@ public class SkyCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player p)) return true;
 
-        // Admin Setup
         if (args.length == 1 && args[0].equalsIgnoreCase("setup")) {
             if (!p.hasPermission("skydrop.admin")) {
                 p.sendMessage(ChatColor.RED + "Keine Rechte.");
@@ -33,58 +32,49 @@ public class SkyCommand implements CommandExecutor {
             return true;
         }
 
-        // Spieler-Logik
-        int level = getDropLevel(p);
-        if (level == 0) {
+        int maxDrops = getWeeklyDrops(p);
+        if (maxDrops == 0) {
             p.sendMessage(ChatColor.RED + "Du hast keine Berechtigung für SkyDrops.");
             return true;
         }
 
-        // Spieler initialisieren & Drops gutschreiben
-        plugin.getDropManager().initPlayer(p.getUniqueId());
-        plugin.getDropManager().accrueDrops(p.getUniqueId());
+        plugin.getDropManager().checkWeeklyReset(p.getUniqueId(), maxDrops);
 
-        int available = plugin.getDropManager().getAvailableDrops(p.getUniqueId());
-        if (available <= 0) {
-            p.sendMessage(ChatColor.RED + "Du hast aktuell keine verfügbaren SkyDrops.");
+        if (!plugin.getDropManager().hasDrops(p.getUniqueId())) {
+            p.sendMessage(ChatColor.RED + "Du hast deine wöchentlichen SkyDrops bereits verbraucht.");
             return true;
         }
 
-        World farmWorld = Bukkit.getWorld("farmwelt");
-        if (farmWorld == null) {
-            p.sendMessage(ChatColor.RED + "Die Welt 'farmwelt' wurde nicht gefunden.");
+        World farm = Bukkit.getWorld("farmwelt");
+        if (farm == null) {
+            p.sendMessage(ChatColor.RED + "Die Welt 'farmwelt' existiert nicht.");
             return true;
         }
 
-        p.sendMessage(ChatColor.GREEN + "Deine SkyDrops fallen in der Farmwelt! Verfügbare Drops: " + available);
+        int drops = plugin.getDropManager().getDrops(p.getUniqueId());
+        p.sendMessage(ChatColor.GREEN + "Du löst " + drops + " SkyDrops ein!");
 
-        int dropsToUse = available;
+        for (int i = 0; i < drops; i++) {
+            Location playerLoc = p.getLocation();
 
-        for (int d = 0; d < dropsToUse; d++) {
-            for (int i = 0; i < level; i++) {
-                Location playerLoc = p.getLocation();
-                double baseX = playerLoc.getX();
-                double baseZ = playerLoc.getZ();
+            double offsetX = (Math.random() - 0.5) * 20;
+            double offsetZ = (Math.random() - 0.5) * 20;
 
-                double offsetX = (Math.random() - 0.5) * 20; // -10 bis +10
-                double offsetZ = (Math.random() - 0.5) * 20;
+            int x = (int) (playerLoc.getX() + offsetX);
+            int z = (int) (playerLoc.getZ() + offsetZ);
 
-                int targetX = (int) Math.round(baseX + offsetX);
-                int targetZ = (int) Math.round(baseZ + offsetZ);
+            int y = farm.getHighestBlockYAt(x, z);
 
-                int groundY = farmWorld.getHighestBlockYAt(targetX, targetZ);
-                Location targetLoc = new Location(farmWorld, targetX + 0.5, groundY + 1, targetZ + 0.5);
+            Location dropLoc = new Location(farm, x + 0.5, y + 1, z + 0.5);
 
-                new ChestSpawner(plugin).spawnChest(targetLoc, plugin.getDropManager().generateLoot());
-            }
-
+            new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
             plugin.getDropManager().consumeDrop(p.getUniqueId());
         }
 
         return true;
     }
 
-    private int getDropLevel(Player p) {
+    private int getWeeklyDrops(Player p) {
         for (int i = 9; i >= 1; i--) {
             if (p.hasPermission("skydrop.use." + i)) return i;
         }

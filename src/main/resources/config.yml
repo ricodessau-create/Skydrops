@@ -1,6 +1,2 @@
-# Zeit in STUNDEN, die ein Spieler warten muss, bis er den Drop wieder abholen kann.
-# Beispiele:
-# 24 = 1 Tag
-# 168 = 1 Woche (7 * 24)
-# 720 = 1 Monat (30 * 24)
+# Wird nicht mehr für Drops genutzt, aber falls du später was brauchst:
 cooldown-hours: 24

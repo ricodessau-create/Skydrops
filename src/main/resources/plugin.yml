@@ -4,8 +4,26 @@ main: de.bierrang.plugin.BierSkyDrop
 api-version: '1.21'
 commands:
   skydrop:
-    description: Hauptbefehl
+    description: SkyDrop Befehl
     usage: /skydrop
 permissions:
   skydrop.admin:
     default: op
+  skydrop.use.1:
+    default: false
+  skydrop.use.2:
+    default: false
+  skydrop.use.3:
+    default: false
+  skydrop.use.4:
+    default: false
+  skydrop.use.5:
+    default: false
+  skydrop.use.6:
+    default: false
+  skydrop.use.7:
+    default: false
+  skydrop.use.8:
+    default: false
+  skydrop.use.9:
+    default: false

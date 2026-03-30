@@ -7,6 +7,8 @@ import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.temporal.WeekFields;
 import java.util.*;
 
 public class DropManager {
@@ -17,8 +19,8 @@ public class DropManager {
 
     private final List<ItemStack> itemPool = new ArrayList<>();
 
-    private final Map<UUID, Integer> availableDrops = new HashMap<>();
-    private final Map<UUID, Long> lastAccrual = new HashMap<>();
+    private final Map<UUID, Integer> weeklyDrops = new HashMap<>();
+    private final Map<UUID, Integer> storedWeek = new HashMap<>();
 
     public DropManager(BierSkyDrop plugin) {
         this.plugin = plugin;
@@ -38,28 +40,25 @@ public class DropManager {
         List<?> list = dataConfig.getList("pool");
         if (list != null) {
             for (Object o : list) {
-                if (o instanceof ItemStack item) {
-                    if (item.getType() != Material.AIR) {
-                        itemPool.add(item);
-                    }
+                if (o instanceof ItemStack item && item.getType() != Material.AIR) {
+                    itemPool.add(item);
                 }
             }
         }
 
-        availableDrops.clear();
-        lastAccrual.clear();
+        weeklyDrops.clear();
+        storedWeek.clear();
 
         if (dataConfig.isConfigurationSection("players")) {
             for (String key : dataConfig.getConfigurationSection("players").getKeys(false)) {
                 try {
                     UUID uuid = UUID.fromString(key);
                     int drops = dataConfig.getInt("players." + key + ".drops", 0);
-                    long last = dataConfig.getLong("players." + key + ".last", 0L);
-                    availableDrops.put(uuid, drops);
-                    lastAccrual.put(uuid, last);
-                } catch (IllegalArgumentException ignored) {
-                    // falls mal ein kaputter Key drin ist, ignorieren
-                }
+                    int week = dataConfig.getInt("players." + key + ".week", getCurrentWeek());
+
+                    weeklyDrops.put(uuid, drops);
+                    storedWeek.put(uuid, week);
+                } catch (IllegalArgumentException ignored) {}
             }
         }
     }
@@ -68,14 +67,10 @@ public class DropManager {
         dataConfig.set("pool", itemPool);
 
         dataConfig.set("players", null);
-        for (Map.Entry<UUID, Integer> entry : availableDrops.entrySet()) {
-            UUID uuid = entry.getKey();
-            int drops = entry.getValue();
-            long last = lastAccrual.getOrDefault(uuid, 0L);
-
+        for (UUID uuid : weeklyDrops.keySet()) {
             String base = "players." + uuid.toString();
-            dataConfig.set(base + ".drops", drops);
-            dataConfig.set(base + ".last", last);
+            dataConfig.set(base + ".drops", weeklyDrops.get(uuid));
+            dataConfig.set(base + ".week", storedWeek.get(uuid));
         }
 
         try {
@@ -85,73 +80,41 @@ public class DropManager {
         }
     }
 
-    public List<ItemStack> getPool() {
-        return itemPool;
+    private int getCurrentWeek() {
+        return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
 
-    // Stunden aus config.yml, z.B. cooldown-hours: 24
-    private long getCooldownMillis() {
-        long hours = plugin.getConfig().getLong("cooldown-hours", 24);
-        return hours * 60L * 60L * 1000L;
-    }
+    public void checkWeeklyReset(UUID uuid, int maxDrops) {
+        int currentWeek = getCurrentWeek();
+        int savedWeek = storedWeek.getOrDefault(uuid, -1);
 
-    // Maximal ansammelbare Drops, z.B. max-drops: 7
-    private int getMaxDrops() {
-        return plugin.getConfig().getInt("max-drops", 7);
-    }
-
-    // Rechnet neue Drops gut, basierend auf Zeit
-    public void accrueDrops(UUID uuid) {
-        long now = System.currentTimeMillis();
-        long cooldownMs = getCooldownMillis();
-
-        long last = lastAccrual.getOrDefault(uuid, 0L);
-        if (last == 0L) {
-            lastAccrual.put(uuid, now);
-            return;
-        }
-
-        long diff = now - last;
-        if (diff < cooldownMs) return;
-
-        int gained = (int) (diff / cooldownMs);
-        if (gained <= 0) return;
-
-        int current = availableDrops.getOrDefault(uuid, 0);
-        int max = getMaxDrops();
-        int newTotal = Math.min(max, current + gained);
-
-        availableDrops.put(uuid, newTotal);
-        long usedTime = (long) gained * cooldownMs;
-        lastAccrual.put(uuid, last + usedTime);
-        save();
-    }
-
-    public int getAvailableDrops(UUID uuid) {
-        return availableDrops.getOrDefault(uuid, 0);
-    }
-
-    public boolean hasDrops(UUID uuid) {
-        return getAvailableDrops(uuid) > 0;
-    }
-
-    public void consumeDrop(UUID uuid) {
-        int current = availableDrops.getOrDefault(uuid, 0);
-        if (current <= 0) return;
-        availableDrops.put(uuid, current - 1);
-        save();
-    }
-
-    // Wird aufgerufen, wenn ein Spieler das erste Mal /skydrop nutzt
-    public void initPlayer(UUID uuid) {
-        if (!lastAccrual.containsKey(uuid)) {
-            lastAccrual.put(uuid, System.currentTimeMillis());
-            availableDrops.putIfAbsent(uuid, 0);
+        if (savedWeek != currentWeek) {
+            weeklyDrops.put(uuid, maxDrops);
+            storedWeek.put(uuid, currentWeek);
             save();
         }
     }
 
-    // Loot-Regeln: max 5 verschiedene Items, 1–5 Stück, Köpfe max 1
+    public int getDrops(UUID uuid) {
+        return weeklyDrops.getOrDefault(uuid, 0);
+    }
+
+    public boolean hasDrops(UUID uuid) {
+        return getDrops(uuid) > 0;
+    }
+
+    public void consumeDrop(UUID uuid) {
+        int current = weeklyDrops.getOrDefault(uuid, 0);
+        if (current > 0) {
+            weeklyDrops.put(uuid, current - 1);
+            save();
+        }
+    }
+
+    public List<ItemStack> getPool() {
+        return itemPool;
+    }
+
     public List<ItemStack> generateLoot() {
         if (itemPool.isEmpty()) return new ArrayList<>();
 
@@ -178,8 +141,7 @@ public class DropManager {
                 reward.setAmount(1);
                 headUsed = true;
             } else {
-                int amount = random.nextInt(5) + 1; // 1–5
-                reward.setAmount(amount);
+                reward.setAmount(random.nextInt(5) + 1);
             }
 
             loot.add(reward);

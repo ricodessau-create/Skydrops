@@ -55,10 +55,10 @@ public class ChestSpawner {
             Location loc = fb.getLocation();
             Block block = loc.getBlock();
 
+            // Platz suchen
             if (block.getType().isSolid()) {
                 block = block.getLocation().add(0, 1, 0).getBlock();
             }
-
             int attempts = 0;
             while (block.getType().isSolid() && attempts < 5) {
                 block = block.getLocation().add(0, 1, 0).getBlock();

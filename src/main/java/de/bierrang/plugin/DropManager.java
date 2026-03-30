@@ -18,7 +18,6 @@ public class DropManager {
     private final FileConfiguration dataConfig;
 
     private final List<ItemStack> itemPool = new ArrayList<>();
-
     private final Map<UUID, Integer> weeklyDrops = new HashMap<>();
     private final Map<UUID, Integer> storedWeek = new HashMap<>();
 
@@ -26,11 +25,7 @@ public class DropManager {
         this.plugin = plugin;
         this.dataFile = new File(plugin.getDataFolder(), "data.yml");
         if (!dataFile.exists()) {
-            try {
-                dataFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            try { dataFile.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         }
         this.dataConfig = YamlConfiguration.loadConfiguration(dataFile);
     }
@@ -65,25 +60,22 @@ public class DropManager {
 
     public void save() {
         dataConfig.set("pool", itemPool);
-
         dataConfig.set("players", null);
+        
         for (UUID uuid : weeklyDrops.keySet()) {
             String base = "players." + uuid.toString();
             dataConfig.set(base + ".drops", weeklyDrops.get(uuid));
             dataConfig.set(base + ".week", storedWeek.get(uuid));
         }
 
-        try {
-            dataConfig.save(dataFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        try { dataConfig.save(dataFile); } catch (IOException e) { e.printStackTrace(); }
     }
 
     private int getCurrentWeek() {
         return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
 
+    // Setzt Counter zurück, wenn neue Woche
     public void checkWeeklyReset(UUID uuid, int maxDrops) {
         int currentWeek = getCurrentWeek();
         int savedWeek = storedWeek.getOrDefault(uuid, -1);
@@ -103,7 +95,8 @@ public class DropManager {
         return getDrops(uuid) > 0;
     }
 
-    public void consumeDrop(UUID uuid) {
+    // NEU: Zieht genau 1 Drop ab
+    public void useDrop(UUID uuid) {
         int current = weeklyDrops.getOrDefault(uuid, 0);
         if (current > 0) {
             weeklyDrops.put(uuid, current - 1);
@@ -111,9 +104,7 @@ public class DropManager {
         }
     }
 
-    public List<ItemStack> getPool() {
-        return itemPool;
-    }
+    public List<ItemStack> getPool() { return itemPool; }
 
     public List<ItemStack> generateLoot() {
         if (itemPool.isEmpty()) return new ArrayList<>();
@@ -128,26 +119,21 @@ public class DropManager {
 
         for (ItemStack poolItem : poolCopy) {
             if (itemsGenerated >= 5) break;
-
             if (poolItem == null || poolItem.getType() == Material.AIR) continue;
 
             boolean isHead = poolItem.getType() == Material.PLAYER_HEAD;
-
             if (isHead && headUsed) continue;
 
             ItemStack reward = poolItem.clone();
-
             if (isHead) {
                 reward.setAmount(1);
                 headUsed = true;
             } else {
                 reward.setAmount(random.nextInt(5) + 1);
             }
-
             loot.add(reward);
             itemsGenerated++;
         }
-
         return loot;
     }
 }

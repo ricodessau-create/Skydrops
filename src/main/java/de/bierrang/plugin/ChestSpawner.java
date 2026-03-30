@@ -23,18 +23,20 @@ public class ChestSpawner {
     public void spawnChest(Location targetLoc, List<ItemStack> loot) {
         if (loot.isEmpty()) return;
         
-        Location spawnLoc = targetLoc.clone().add(0, 15, 0);
+        // Etwas höher spawnen und Block mit Luft erzwingen, damit sie nicht im Boden stecken
+        Location spawnLoc = targetLoc.clone().add(0, 20, 0); 
+        // Zielblock ermitteln (wo sie landen sollen)
+        Block targetBlock = targetLoc.getBlock();
         
-        // FallingBlock spawn
         FallingBlock fb = spawnLoc.getWorld().spawnFallingBlock(spawnLoc, Material.CHEST.createBlockData());
         fb.setDropItem(false);
         
-        new FallTracker(fb, targetLoc.getBlock(), loot).runTaskTimer(plugin, 1L, 1L);
+        new FallTracker(fb, targetBlock, loot).runTaskTimer(plugin, 1L, 1L);
     }
 
     private class FallTracker extends BukkitRunnable {
         private final FallingBlock fb;
-        private Block targetBlock; // HIER 'final' ENTFERNT
+        private Block targetBlock; // Nicht final, da wir den Block ändern können
         private final List<ItemStack> loot;
 
         public FallTracker(FallingBlock fb, Block targetBlock, List<ItemStack> loot) {
@@ -52,12 +54,18 @@ public class ChestSpawner {
         }
 
         private void placeChest() {
-            // Wenn Block fest ist, eins drüber setzen
+            // Wenn Zielblock fest ist, eins drüber setzen
             if (targetBlock.getType().isSolid()) {
                 targetBlock = targetBlock.getLocation().add(0, 1, 0).getBlock();
             }
             
-            // Block setzen
+            // Wenn immer noch fest (z.B. unter einem Baum), suchen wir einen freien Platz
+            int attempts = 0;
+            while (targetBlock.getType().isSolid() && attempts < 5) {
+                targetBlock = targetBlock.getLocation().add(0, 1, 0).getBlock();
+                attempts++;
+            }
+            
             targetBlock.setType(Material.CHEST);
             
             if (targetBlock.getState() instanceof Chest chest) {
@@ -67,7 +75,6 @@ public class ChestSpawner {
                 chest.update();
             }
             
-            // Effekte
             targetBlock.getWorld().playSound(targetBlock.getLocation(), Sound.BLOCK_WOOD_PLACE, 1, 1);
             targetBlock.getWorld().spawnParticle(Particle.CLOUD, targetBlock.getLocation().add(0.5, 0.5, 0.5), 10);
         }

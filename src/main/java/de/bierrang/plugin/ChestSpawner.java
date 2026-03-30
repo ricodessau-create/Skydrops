@@ -21,22 +21,20 @@ public class ChestSpawner {
     }
 
     public void spawnChest(Location targetLoc, List<ItemStack> loot) {
-        if (loot.isEmpty()) return;
-        
-        // Etwas höher spawnen und Block mit Luft erzwingen, damit sie nicht im Boden stecken
-        Location spawnLoc = targetLoc.clone().add(0, 20, 0); 
-        // Zielblock ermitteln (wo sie landen sollen)
+        if (loot == null || loot.isEmpty()) return;
+
+        Location spawnLoc = targetLoc.clone().add(0, 20, 0);
         Block targetBlock = targetLoc.getBlock();
-        
+
         FallingBlock fb = spawnLoc.getWorld().spawnFallingBlock(spawnLoc, Material.CHEST.createBlockData());
         fb.setDropItem(false);
-        
+
         new FallTracker(fb, targetBlock, loot).runTaskTimer(plugin, 1L, 1L);
     }
 
     private class FallTracker extends BukkitRunnable {
         private final FallingBlock fb;
-        private Block targetBlock; // Nicht final, da wir den Block ändern können
+        private Block targetBlock;
         private final List<ItemStack> loot;
 
         public FallTracker(FallingBlock fb, Block targetBlock, List<ItemStack> loot) {
@@ -47,36 +45,39 @@ public class ChestSpawner {
 
         @Override
         public void run() {
-            if (fb.isDead()) {
+            if (fb.isDead() || fb.isOnGround()) {
                 placeChest();
                 cancel();
             }
         }
 
         private void placeChest() {
-            // Wenn Zielblock fest ist, eins drüber setzen
-            if (targetBlock.getType().isSolid()) {
-                targetBlock = targetBlock.getLocation().add(0, 1, 0).getBlock();
+            Location loc = fb.getLocation();
+            Block block = loc.getBlock();
+
+            if (block.getType().isSolid()) {
+                block = block.getLocation().add(0, 1, 0).getBlock();
             }
-            
-            // Wenn immer noch fest (z.B. unter einem Baum), suchen wir einen freien Platz
+
             int attempts = 0;
-            while (targetBlock.getType().isSolid() && attempts < 5) {
-                targetBlock = targetBlock.getLocation().add(0, 1, 0).getBlock();
+            while (block.getType().isSolid() && attempts < 5) {
+                block = block.getLocation().add(0, 1, 0).getBlock();
                 attempts++;
             }
-            
-            targetBlock.setType(Material.CHEST);
-            
-            if (targetBlock.getState() instanceof Chest chest) {
+
+            block.setType(Material.CHEST);
+
+            if (block.getState() instanceof Chest chest) {
                 for (ItemStack item : loot) {
-                    chest.getBlockInventory().addItem(item);
+                    if (item != null && item.getType() != Material.AIR) {
+                        chest.getBlockInventory().addItem(item);
+                    }
                 }
                 chest.update();
             }
-            
-            targetBlock.getWorld().playSound(targetBlock.getLocation(), Sound.BLOCK_WOOD_PLACE, 1, 1);
-            targetBlock.getWorld().spawnParticle(Particle.CLOUD, targetBlock.getLocation().add(0.5, 0.5, 0.5), 10);
+
+            block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 1, 1);
+            block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 10);
         }
     }
 }

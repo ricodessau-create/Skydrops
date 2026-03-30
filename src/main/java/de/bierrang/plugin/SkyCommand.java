@@ -23,6 +23,7 @@ public class SkyCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player p)) return true;
 
+        // Admin Setup
         if (args.length == 1 && args[0].equalsIgnoreCase("setup")) {
             if (!p.hasPermission("skydrop.admin")) {
                 p.sendMessage(ChatColor.RED + "Keine Rechte.");
@@ -32,44 +33,44 @@ public class SkyCommand implements CommandExecutor {
             return true;
         }
 
+        // Permission Check
         int maxDrops = getWeeklyDrops(p);
         if (maxDrops == 0) {
             p.sendMessage(ChatColor.RED + "Du hast keine Berechtigung für SkyDrops.");
             return true;
         }
 
+        // Wochen-Reset prüfen
         plugin.getDropManager().checkWeeklyReset(p.getUniqueId(), maxDrops);
 
+        // Hat er noch Drops übrig?
         if (!plugin.getDropManager().hasDrops(p.getUniqueId())) {
             p.sendMessage(ChatColor.RED + "Du hast deine wöchentlichen SkyDrops bereits verbraucht.");
+            p.sendMessage(ChatColor.GRAY + "Warte auf die nächste Woche.");
             return true;
         }
 
-        World farm = Bukkit.getWorld("farmwelt");
-        if (farm == null) {
-            p.sendMessage(ChatColor.RED + "Die Welt 'farmwelt' existiert nicht.");
-            return true;
-        }
+        // Welt festlegen (dort wo der Spieler ist)
+        World world = p.getWorld();
 
-        int drops = plugin.getDropManager().getDrops(p.getUniqueId());
-        p.sendMessage(ChatColor.GREEN + "Du löst " + drops + " SkyDrops ein!");
+        // Position berechnen (Zufall um den Spieler herum)
+        Location playerLoc = p.getLocation();
+        double offsetX = (Math.random() - 0.5) * 10;
+        double offsetZ = (Math.random() - 0.5) * 10;
+        int x = (int) (playerLoc.getX() + offsetX);
+        int z = (int) (playerLoc.getZ() + offsetZ);
+        int y = world.getHighestBlockYAt(x, z);
 
-        for (int i = 0; i < drops; i++) {
-            Location playerLoc = p.getLocation();
+        Location dropLoc = new Location(world, x + 0.5, y + 1, z + 0.5);
 
-            double offsetX = (Math.random() - 0.5) * 20;
-            double offsetZ = (Math.random() - 0.5) * 20;
+        // 1 Kiste spawnen
+        new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
+        
+        // 1 Drop abziehen
+        plugin.getDropManager().useDrop(p.getUniqueId());
 
-            int x = (int) (playerLoc.getX() + offsetX);
-            int z = (int) (playerLoc.getZ() + offsetZ);
-
-            int y = farm.getHighestBlockYAt(x, z);
-
-            Location dropLoc = new Location(farm, x + 0.5, y + 1, z + 0.5);
-
-            new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
-            plugin.getDropManager().consumeDrop(p.getUniqueId());
-        }
+        int remaining = plugin.getDropManager().getDrops(p.getUniqueId());
+        p.sendMessage(ChatColor.GREEN + "SkyDrop abgeworfen! Noch übrig: " + remaining);
 
         return true;
     }
@@ -83,11 +84,9 @@ public class SkyCommand implements CommandExecutor {
 
     private void openSetupGUI(Player p) {
         Inventory inv = Bukkit.createInventory(null, 54, "§cSkyDrop Pool (Items reinlegen)");
-
         for (ItemStack item : plugin.getDropManager().getPool()) {
             inv.addItem(item);
         }
-
         p.openInventory(inv);
     }
 }

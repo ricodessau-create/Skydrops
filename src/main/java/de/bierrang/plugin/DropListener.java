@@ -1,5 +1,6 @@
 package de.bierrang.plugin;
 
+import org.bukkit.Material;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -22,17 +23,19 @@ public class DropListener implements Listener {
         if (e.getView().getTitle().equals("§cSkyDrop Pool (Items reinlegen)")) {
             List<ItemStack> newPool = new ArrayList<>();
             Inventory inv = e.getInventory();
-            
+
             for (ItemStack item : inv.getContents()) {
-                if (item != null) {
-                    newPool.add(item.clone());
+                if (item != null && item.getType() != Material.AIR) {
+                    ItemStack clone = item.clone();
+                    clone.setAmount(1); // Stackgröße im Pool egal, Menge wird später bestimmt
+                    newPool.add(clone);
                 }
             }
-            
+
             plugin.getDropManager().getPool().clear();
             plugin.getDropManager().getPool().addAll(newPool);
             plugin.getDropManager().save();
-            
+
             e.getPlayer().sendMessage("§aSkyDrop Pool gespeichert! (" + newPool.size() + " Items)");
         }
     }

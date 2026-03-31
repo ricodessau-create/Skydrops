@@ -43,18 +43,24 @@ public class SkyCommand implements CommandExecutor {
         // Wochen-Reset prüfen
         plugin.getDropManager().checkWeeklyReset(p.getUniqueId(), maxDrops);
 
-        // Hat er noch Drops übrig?
+        // Noch Drops übrig?
         if (!plugin.getDropManager().hasDrops(p.getUniqueId())) {
             p.sendMessage(ChatColor.RED + "Du hast deine wöchentlichen SkyDrops bereits verbraucht.");
-            p.sendMessage(ChatColor.GRAY + "Warte auf die nächste Woche.");
             return true;
         }
 
-        // Welt festlegen (dort wo der Spieler ist)
-        World world = p.getWorld();
+        // WICHTIG: Check ob Items im Pool sind
+        if (plugin.getDropManager().getPool().isEmpty()) {
+            p.sendMessage(ChatColor.RED + "Fehler: Es wurden keine Items für SkyDrops konfiguriert.");
+            p.sendMessage(ChatColor.GRAY + "Ein Admin muss '/skydrop setup' nutzen.");
+            return true;
+        }
 
-        // Position berechnen (Zufall um den Spieler herum)
+        // Welt & Position
+        World world = p.getWorld();
         Location playerLoc = p.getLocation();
+
+        // Zufällige Position
         double offsetX = (Math.random() - 0.5) * 10;
         double offsetZ = (Math.random() - 0.5) * 10;
         int x = (int) (playerLoc.getX() + offsetX);
@@ -63,10 +69,10 @@ public class SkyCommand implements CommandExecutor {
 
         Location dropLoc = new Location(world, x + 0.5, y + 1, z + 0.5);
 
-        // 1 Kiste spawnen
+        // Genau 1 Kiste spawnen
         new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
         
-        // 1 Drop abziehen
+        // Genau 1 Drop abziehen
         plugin.getDropManager().useDrop(p.getUniqueId());
 
         int remaining = plugin.getDropManager().getDrops(p.getUniqueId());

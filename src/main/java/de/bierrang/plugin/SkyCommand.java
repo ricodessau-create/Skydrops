@@ -11,6 +11,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.List;
+
 public class SkyCommand implements CommandExecutor {
 
     private final BierSkyDrop plugin;
@@ -23,7 +25,6 @@ public class SkyCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player p)) return true;
 
-        // Admin Setup
         if (args.length == 1 && args[0].equalsIgnoreCase("setup")) {
             if (!p.hasPermission("skydrop.admin")) {
                 p.sendMessage(ChatColor.RED + "Keine Rechte.");
@@ -33,34 +34,42 @@ public class SkyCommand implements CommandExecutor {
             return true;
         }
 
-        // Permission Check
         int maxDrops = getWeeklyDrops(p);
         if (maxDrops == 0) {
             p.sendMessage(ChatColor.RED + "Du hast keine Berechtigung für SkyDrops.");
             return true;
         }
 
-        // Wochen-Reset prüfen
         plugin.getDropManager().checkWeeklyReset(p.getUniqueId(), maxDrops);
 
-        // Noch Drops übrig?
         if (!plugin.getDropManager().hasDrops(p.getUniqueId())) {
             p.sendMessage(ChatColor.RED + "Du hast deine wöchentlichen SkyDrops bereits verbraucht.");
             return true;
         }
 
-        // WICHTIG: Check ob Items im Pool sind
         if (plugin.getDropManager().getPool().isEmpty()) {
             p.sendMessage(ChatColor.RED + "Fehler: Es wurden keine Items für SkyDrops konfiguriert.");
             p.sendMessage(ChatColor.GRAY + "Ein Admin muss '/skydrop setup' nutzen.");
             return true;
         }
 
-        // Welt & Position
+        // --- FIX START ---
+        // 1. Loot generieren
+        List<ItemStack> loot = plugin.getDropManager().generateLoot();
+        
+        // 2. Prüfen ob Loot leer ist
+        if (loot == null || loot.isEmpty()) {
+            p.sendMessage(ChatColor.RED + "Fehler: Konnte keinen Loot generieren. Pool defekt?");
+            return true;
+        }
+
+        // 3. Drop verbrauchen (erst jetzt!)
+        plugin.getDropManager().useDrop(p.getUniqueId());
+        // --- FIX ENDE ---
+
         World world = p.getWorld();
         Location playerLoc = p.getLocation();
 
-        // Zufällige Position
         double offsetX = (Math.random() - 0.5) * 10;
         double offsetZ = (Math.random() - 0.5) * 10;
         int x = (int) (playerLoc.getX() + offsetX);
@@ -69,11 +78,8 @@ public class SkyCommand implements CommandExecutor {
 
         Location dropLoc = new Location(world, x + 0.5, y + 1, z + 0.5);
 
-        // Genau 1 Kiste spawnen
-        new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
-        
-        // Genau 1 Drop abziehen
-        plugin.getDropManager().useDrop(p.getUniqueId());
+        // 4. Kiste spawnen mit garantiertem Loot
+        new ChestSpawner(plugin).spawnChest(dropLoc, loot);
 
         int remaining = plugin.getDropManager().getDrops(p.getUniqueId());
         p.sendMessage(ChatColor.GREEN + "SkyDrop abgeworfen! Noch übrig: " + remaining);

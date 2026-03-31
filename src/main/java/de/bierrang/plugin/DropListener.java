@@ -27,7 +27,7 @@ public class DropListener implements Listener {
             for (ItemStack item : inv.getContents()) {
                 if (item != null && item.getType() != Material.AIR) {
                     ItemStack clone = item.clone();
-                    clone.setAmount(1);
+                    clone.setAmount(1); // Wir speichern nur das Item, nicht die Menge
                     newPool.add(clone);
                 }
             }

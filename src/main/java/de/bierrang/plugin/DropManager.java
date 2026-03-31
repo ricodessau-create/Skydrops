@@ -1,6 +1,7 @@
 package de.bierrang.plugin;
 
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
@@ -36,22 +37,38 @@ public class DropManager {
         List<?> list = dataConfig.getList("pool");
         if (list != null) {
             for (Object o : list) {
-                if (o instanceof ItemStack item && item.getType() != Material.AIR) {
-                    itemPool.add(item);
-                } else if (o instanceof Map) {
-                    try {
-                        ItemStack item = ItemStack.deserialize((Map<String, Object>) o);
-                        if (item != null && item.getType() != Material.AIR) itemPool.add(item);
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Konnte Item nicht laden: " + e.getMessage());
+                try {
+                    ItemStack item = null;
+
+                    // FALL 1: Es ist schon ein ItemStack (selten, aber möglich)
+                    if (o instanceof ItemStack stack) {
+                        item = stack;
                     }
+                    // FALL 2: Es ist eine ConfigurationSection (Standard in YAML)
+                    else if (o instanceof ConfigurationSection section) {
+                        // Wandelt Section in Map um (deep=true für nested data)
+                        Map<String, Object> map = section.getValues(true);
+                        item = ItemStack.deserialize(map);
+                    }
+                    // FALL 3: Es ist eine Map
+                    else if (o instanceof Map map) {
+                        item = ItemStack.deserialize(map);
+                    }
+
+                    // Item hinzufügen, wenn gültig
+                    if (item != null && item.getType() != Material.AIR) {
+                        itemPool.add(item);
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Konnte ein Item nicht laden: " + e.getMessage());
                 }
             }
         }
 
+        // DEBUG LOG
         plugin.getLogger().info("§a[BierSkyDrop] §7Geladene Items im Pool: §e" + itemPool.size());
-        if (itemPool.isEmpty()) {
-            plugin.getLogger().warning("§c[BierSkyDrop] Pool ist leer! Bitte nutze §e/skydrop setup");
+        if (itemPool.isEmpty() && dataFile.exists()) {
+            plugin.getLogger().warning("§c[BierSkyDrop] Pool ist leer! Nutze §e/skydrop setup");
         }
 
         weeklyDrops.clear();
@@ -119,23 +136,19 @@ public class DropManager {
 
     public List<ItemStack> generateLoot() {
         if (itemPool.isEmpty()) {
-            plugin.getLogger().warning("§c[BierSkyDrop] FEHLER: Keine Items zum Droppen! Pool ist leer.");
+            plugin.getLogger().warning("§c[BierSkyDrop] FEHLER: Pool ist leer beim Generieren!");
             return new ArrayList<>();
         }
 
         List<ItemStack> loot = new ArrayList<>();
-        
-        // 1. Kopie erstellen und von Müll befreien (AIR, null)
         List<ItemStack> poolCopy = new ArrayList<>();
+        
+        // Bereinigen
         for (ItemStack item : itemPool) {
-            if (item != null && item.getType() != Material.AIR) {
-                poolCopy.add(item);
-            }
+            if (item != null && item.getType() != Material.AIR) poolCopy.add(item);
         }
         
-        if (poolCopy.isEmpty()) {
-            return new ArrayList<>(); // Sollte nicht passieren, aber sicher ist sicher
-        }
+        if (poolCopy.isEmpty()) return new ArrayList<>();
 
         Collections.shuffle(poolCopy);
 
@@ -159,12 +172,11 @@ public class DropManager {
             loot.add(reward);
             itemsGenerated++;
         }
-
-        // FIX: Falls itemsGenerated 0 ist (kommt hier nicht mehr vor, aber als Fallback)
-        if (loot.isEmpty() && !poolCopy.isEmpty()) {
-             ItemStack fallback = poolCopy.get(0).clone();
-             fallback.setAmount(1);
-             loot.add(fallback);
+        
+        if (loot.isEmpty()) {
+            ItemStack fallback = poolCopy.get(0).clone();
+            fallback.setAmount(1);
+            loot.add(fallback);
         }
 
         plugin.getLogger().info("§b[BierSkyDrop] Loot generiert: §f" + loot.size() + " Items.");

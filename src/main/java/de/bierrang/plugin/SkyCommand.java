@@ -1,98 +1,142 @@
 package de.bierrang.plugin;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
-import org.bukkit.World;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
+import org.bukkit.Material;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 
-public class SkyCommand implements CommandExecutor {
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.temporal.WeekFields;
+import java.util.*;
+
+public class DropManager {
 
     private final BierSkyDrop plugin;
+    private final File dataFile;
+    private final FileConfiguration dataConfig;
 
-    public SkyCommand(BierSkyDrop plugin) {
+    private final List<ItemStack> itemPool = new ArrayList<>();
+    private final Map<UUID, Integer> weeklyDrops = new HashMap<>();
+    private final Map<UUID, Integer> storedWeek = new HashMap<>();
+
+    public DropManager(BierSkyDrop plugin) {
         this.plugin = plugin;
+        this.dataFile = new File(plugin.getDataFolder(), "data.yml");
+        if (!dataFile.exists()) {
+            try { dataFile.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
+        }
+        this.dataConfig = YamlConfiguration.loadConfiguration(dataFile);
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player p)) return true;
-
-        // Admin Setup
-        if (args.length == 1 && args[0].equalsIgnoreCase("setup")) {
-            if (!p.hasPermission("skydrop.admin")) {
-                p.sendMessage(ChatColor.RED + "Keine Rechte.");
-                return true;
+    public void load() {
+        itemPool.clear();
+        List<?> list = dataConfig.getList("pool");
+        if (list != null) {
+            for (Object o : list) {
+                if (o instanceof ItemStack item && item.getType() != Material.AIR) {
+                    itemPool.add(item);
+                }
             }
-            openSetupGUI(p);
-            return true;
         }
 
-        // Permission Check
-        int maxDrops = getWeeklyDrops(p);
-        if (maxDrops == 0) {
-            p.sendMessage(ChatColor.RED + "Du hast keine Berechtigung für SkyDrops.");
-            return true;
+        weeklyDrops.clear();
+        storedWeek.clear();
+
+        if (dataConfig.isConfigurationSection("players")) {
+            for (String key : dataConfig.getConfigurationSection("players").getKeys(false)) {
+                try {
+                    UUID uuid = UUID.fromString(key);
+                    int drops = dataConfig.getInt("players." + key + ".drops", 0);
+                    int week = dataConfig.getInt("players." + key + ".week", getCurrentWeek());
+
+                    weeklyDrops.put(uuid, drops);
+                    storedWeek.put(uuid, week);
+                } catch (IllegalArgumentException ignored) {}
+            }
         }
+    }
 
-        // Wochen-Reset prüfen
-        plugin.getDropManager().checkWeeklyReset(p.getUniqueId(), maxDrops);
-
-        // Noch Drops übrig?
-        if (!plugin.getDropManager().hasDrops(p.getUniqueId())) {
-            p.sendMessage(ChatColor.RED + "Du hast deine wöchentlichen SkyDrops bereits verbraucht.");
-            return true;
-        }
-
-        // WICHTIG: Check ob Items im Pool sind
-        if (plugin.getDropManager().getPool().isEmpty()) {
-            p.sendMessage(ChatColor.RED + "Fehler: Es wurden keine Items für SkyDrops konfiguriert.");
-            p.sendMessage(ChatColor.GRAY + "Ein Admin muss '/skydrop setup' nutzen.");
-            return true;
-        }
-
-        // Welt & Position
-        World world = p.getWorld();
-        Location playerLoc = p.getLocation();
-
-        // Zufällige Position
-        double offsetX = (Math.random() - 0.5) * 10;
-        double offsetZ = (Math.random() - 0.5) * 10;
-        int x = (int) (playerLoc.getX() + offsetX);
-        int z = (int) (playerLoc.getZ() + offsetZ);
-        int y = world.getHighestBlockYAt(x, z);
-
-        Location dropLoc = new Location(world, x + 0.5, y + 1, z + 0.5);
-
-        // Genau 1 Kiste spawnen
-        new ChestSpawner(plugin).spawnChest(dropLoc, plugin.getDropManager().generateLoot());
+    public void save() {
+        dataConfig.set("pool", itemPool);
+        dataConfig.set("players", null);
         
-        // Genau 1 Drop abziehen
-        plugin.getDropManager().useDrop(p.getUniqueId());
+        for (UUID uuid : weeklyDrops.keySet()) {
+            String base = "players." + uuid.toString();
+            dataConfig.set(base + ".drops", weeklyDrops.get(uuid));
+            dataConfig.set(base + ".week", storedWeek.get(uuid));
+        }
 
-        int remaining = plugin.getDropManager().getDrops(p.getUniqueId());
-        p.sendMessage(ChatColor.GREEN + "SkyDrop abgeworfen! Noch übrig: " + remaining);
-
-        return true;
+        try { dataConfig.save(dataFile); } catch (IOException e) { e.printStackTrace(); }
     }
 
-    private int getWeeklyDrops(Player p) {
-        for (int i = 9; i >= 1; i--) {
-            if (p.hasPermission("skydrop.use." + i)) return i;
-        }
-        return 0;
+    private int getCurrentWeek() {
+        return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
 
-    private void openSetupGUI(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 54, "§cSkyDrop Pool (Items reinlegen)");
-        for (ItemStack item : plugin.getDropManager().getPool()) {
-            inv.addItem(item);
+    public void checkWeeklyReset(UUID uuid, int maxDrops) {
+        int currentWeek = getCurrentWeek();
+        int savedWeek = storedWeek.getOrDefault(uuid, -1);
+
+        if (savedWeek != currentWeek) {
+            weeklyDrops.put(uuid, maxDrops);
+            storedWeek.put(uuid, currentWeek);
+            save();
         }
-        p.openInventory(inv);
+    }
+
+    public int getDrops(UUID uuid) {
+        return weeklyDrops.getOrDefault(uuid, 0);
+    }
+
+    public boolean hasDrops(UUID uuid) {
+        return getDrops(uuid) > 0;
+    }
+
+    public void useDrop(UUID uuid) {
+        int current = weeklyDrops.getOrDefault(uuid, 0);
+        if (current > 0) {
+            weeklyDrops.put(uuid, current - 1);
+            save();
+        }
+    }
+
+    public List<ItemStack> getPool() { return itemPool; }
+
+    public List<ItemStack> generateLoot() {
+        if (itemPool.isEmpty()) return new ArrayList<>();
+
+        List<ItemStack> loot = new ArrayList<>();
+        List<ItemStack> poolCopy = new ArrayList<>(itemPool);
+        Collections.shuffle(poolCopy);
+
+        boolean headUsed = false;
+        int itemsGenerated = 0;
+        Random random = new Random();
+
+        for (ItemStack poolItem : poolCopy) {
+            if (itemsGenerated >= 5) break; // Max 5 Items
+            if (poolItem == null || poolItem.getType() == Material.AIR) continue;
+
+            boolean isHead = poolItem.getType() == Material.PLAYER_HEAD;
+
+            // Wenn schon ein Kopf drin ist, überspringen
+            if (isHead && headUsed) continue;
+
+            ItemStack reward = poolItem.clone();
+            
+            if (isHead) {
+                reward.setAmount(1);
+                headUsed = true; // Nur 1 Kopf erlaubt
+            } else {
+                // Menge zwischen 1 und 5
+                reward.setAmount(random.nextInt(5) + 1);
+            }
+
+            loot.add(reward);
+            itemsGenerated++;
+        }
+        return loot;
     }
 }

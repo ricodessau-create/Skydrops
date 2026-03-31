@@ -32,6 +32,7 @@ public class DropManager {
 
     public void load() {
         itemPool.clear();
+        // WICHTIG: getList kann null zurückgeben
         List<?> list = dataConfig.getList("pool");
         if (list != null) {
             for (Object o : list) {
@@ -40,6 +41,9 @@ public class DropManager {
                 }
             }
         }
+        
+        // Debug
+        plugin.getLogger().info("Geladene Items im Pool: " + itemPool.size());
 
         weeklyDrops.clear();
         storedWeek.clear();
@@ -105,7 +109,10 @@ public class DropManager {
     public List<ItemStack> getPool() { return itemPool; }
 
     public List<ItemStack> generateLoot() {
-        if (itemPool.isEmpty()) return new ArrayList<>();
+        if (itemPool.isEmpty()) {
+            plugin.getLogger().warning("ItemPool ist leer! Nutze /skydrop setup.");
+            return new ArrayList<>();
+        }
 
         List<ItemStack> loot = new ArrayList<>();
         List<ItemStack> poolCopy = new ArrayList<>(itemPool);
@@ -132,6 +139,9 @@ public class DropManager {
             loot.add(reward);
             itemsGenerated++;
         }
+        
+        // Debug
+        plugin.getLogger().info("Generierte Loot Items: " + loot.size());
         return loot;
     }
-        }
+}

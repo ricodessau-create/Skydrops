@@ -75,7 +75,6 @@ public class DropManager {
         return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
 
-    // Setzt Counter zurück, wenn neue Woche
     public void checkWeeklyReset(UUID uuid, int maxDrops) {
         int currentWeek = getCurrentWeek();
         int savedWeek = storedWeek.getOrDefault(uuid, -1);
@@ -95,7 +94,6 @@ public class DropManager {
         return getDrops(uuid) > 0;
     }
 
-    // NEU: Zieht genau 1 Drop ab
     public void useDrop(UUID uuid) {
         int current = weeklyDrops.getOrDefault(uuid, 0);
         if (current > 0) {
@@ -136,4 +134,4 @@ public class DropManager {
         }
         return loot;
     }
-}
+        }

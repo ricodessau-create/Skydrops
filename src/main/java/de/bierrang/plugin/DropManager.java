@@ -1,6 +1,7 @@
 package de.bierrang.plugin;
 
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
@@ -32,18 +33,30 @@ public class DropManager {
 
     public void load() {
         itemPool.clear();
-        // WICHTIG: getList kann null zurückgeben
+        
+        // WICHTIG: Verbessertes Laden, damit keine Items verloren gehen
         List<?> list = dataConfig.getList("pool");
         if (list != null) {
             for (Object o : list) {
                 if (o instanceof ItemStack item && item.getType() != Material.AIR) {
                     itemPool.add(item);
+                } else if (o instanceof Map) {
+                    // Manchmal werden Items als Map gespeichert, wir versuchen sie zu laden
+                    try {
+                        ItemStack item = ItemStack.deserialize((Map<String, Object>) o);
+                        if (item != null && item.getType() != Material.AIR) itemPool.add(item);
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Konnte Item nicht laden: " + e.getMessage());
+                    }
                 }
             }
         }
-        
-        // Debug
-        plugin.getLogger().info("Geladene Items im Pool: " + itemPool.size());
+
+        // Debug: Zeigt genau an, was geladen wurde
+        plugin.getLogger().info("§a[BierSkyDrop] §7Geladene Items im Pool: §e" + itemPool.size());
+        if (itemPool.isEmpty()) {
+            plugin.getLogger().warning("§c[BierSkyDrop] Pool ist leer! Bitte nutze §e/skydrop setup");
+        }
 
         weeklyDrops.clear();
         storedWeek.clear();
@@ -110,7 +123,7 @@ public class DropManager {
 
     public List<ItemStack> generateLoot() {
         if (itemPool.isEmpty()) {
-            plugin.getLogger().warning("ItemPool ist leer! Nutze /skydrop setup.");
+            plugin.getLogger().warning("§c[BierSkyDrop] FEHLER: Keine Items zum Droppen! Pool ist leer.");
             return new ArrayList<>();
         }
 
@@ -139,9 +152,9 @@ public class DropManager {
             loot.add(reward);
             itemsGenerated++;
         }
-        
-        // Debug
-        plugin.getLogger().info("Generierte Loot Items: " + loot.size());
+
+        // Debug Log
+        plugin.getLogger().info("§b[BierSkyDrop] Loot generiert: §f" + loot.size() + " Items.");
         return loot;
     }
 }

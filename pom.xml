@@ -6,7 +6,7 @@
 
     <groupId>de.bierrang</groupId>
     <artifactId>BierSkyDrop</artifactId>
-    <version>1.0</version>
+    <version>1.3</version>
     <packaging>jar</packaging>
 
     <name>BierSkyDrop</name>

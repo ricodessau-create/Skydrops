@@ -9,6 +9,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -116,39 +117,51 @@ public class ChestSpawner {
 
             block.setType(Material.CHEST);
             
-            // FIX: Finale Kopie für Lambda erstellen
             final Block finalBlock = block;
 
-            // FIX NACH COPILOT ANALYSE:
-            // 2 Ticks warten -> Inventar füllen -> Double Update (für Geyser/Bedrock)
+            // SEHR WICHTIG: 10 Ticks warten und Debug-Logs
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                Block b = finalBlock.getLocation().getBlock();
-
-                if (!(b.getState() instanceof Chest chest)) {
-                    plugin.getLogger().severe("[BierSkyDrop] Kiste nicht gefunden im Delay!");
-                    return;
-                }
-
-                // 1. Inventar füllen
-                for (ItemStack item : loot) {
-                    if (item != null && item.getType() != Material.AIR) {
-                        chest.getBlockInventory().addItem(item);
+                try {
+                    // 1. State holen
+                    if (!(finalBlock.getState() instanceof Chest chest)) {
+                        plugin.getLogger().severe("DEBUG: KEINE Kiste gefunden!");
+                        return;
                     }
+
+                    plugin.getLogger().info("DEBUG: Kiste gefunden. Füge Items ein...");
+
+                    Inventory inv = chest.getBlockInventory();
+                    int added = 0;
+                    
+                    for (ItemStack item : loot) {
+                        if (item != null && item.getType() != Material.AIR) {
+                            // Items hinzufügen
+                            inv.addItem(item);
+                            added += item.getAmount();
+                        }
+                    }
+
+                    // 2. WICHTIG: Speichern & Update senden
+                    boolean success = chest.update(true, false); // Force Update
+
+                    // 3. Kontrolle: Stehen die Items wirklich drin?
+                    int check = 0;
+                    for (ItemStack i : inv.getContents()) {
+                        if (i != null) check += i.getAmount();
+                    }
+
+                    plugin.getLogger().info("DEBUG: Items hinzugefügt: " + added);
+                    plugin.getLogger().info("DEBUG: Update erfolgreich: " + success);
+                    plugin.getLogger().info("DEBUG: Items in Kiste (Check): " + check);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-
-                // 2. Inventory Update senden
-                chest.update(true, false);
-
-                // 3. WICHTIG FÜR BEDROCK: Block State erneut senden
-                // Das zwingt den Client (Geyser), das TileEntity neu zu laden
-                b.getState().update(true, false);
-                
-                plugin.getLogger().info("§a[BierSkyDrop] Sync erzwungen (2 Ticks).");
-            }, 2L);
+            }, 10L); // 10 Ticks = 0.5 Sekunden
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
             block.getWorld().spawnParticle(Particle.EXPLOSION, block.getLocation().add(0.5, 0.5, 0.5), 1);
         }
     }
-}
+                }

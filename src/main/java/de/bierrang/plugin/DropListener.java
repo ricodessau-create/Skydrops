@@ -23,20 +23,29 @@ public class DropListener implements Listener {
         if (e.getView().getTitle().equals("§cSkyDrop Pool (Items reinlegen)")) {
             List<ItemStack> newPool = new ArrayList<>();
             Inventory inv = e.getInventory();
+            
+            plugin.getLogger().info("--- SKYDROP SETUP GESCHLOSSEN ---");
+            int count = 0;
 
             for (ItemStack item : inv.getContents()) {
                 if (item != null && item.getType() != Material.AIR) {
                     ItemStack clone = item.clone();
                     clone.setAmount(1);
                     newPool.add(clone);
+                    count++;
+                    plugin.getLogger().info("Item gefunden zum Speichern: " + item.getType());
                 }
             }
 
             plugin.getDropManager().getPool().clear();
             plugin.getDropManager().getPool().addAll(newPool);
             plugin.getDropManager().save();
+            
+            plugin.getLogger().info("Gesamt Items gespeichert: " + count);
+            plugin.getLogger().info("Pool Größe im Speicher: " + plugin.getDropManager().getPool().size());
+            plugin.getLogger().info("---------------------------------");
 
-            e.getPlayer().sendMessage("§aSkyDrop Pool gespeichert! (" + newPool.size() + " Items)");
+            e.getPlayer().sendMessage("§aSkyDrop Pool gespeichert! (" + count + " Items)");
         }
     }
 }

@@ -116,10 +116,12 @@ public class ChestSpawner {
 
             block.setType(Material.CHEST);
             
+            // FIX: Wir erstellen eine finale Kopie für den Lambda-Ausdruck
+            final Block finalBlock = block;
+
             // FIX FÜR BEDROCK: ITEMS 1 TICK SPÄTER EINFÜGEN
-            // Block setzen, 50ms warten, dann Items einfügen.
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (block.getState() instanceof Chest chest) {
+                if (finalBlock.getState() instanceof Chest chest) {
                     int itemCount = 0;
                     for (ItemStack item : loot) {
                         if (item != null && item.getType() != Material.AIR) {
@@ -132,11 +134,11 @@ public class ChestSpawner {
                 } else {
                      plugin.getLogger().severe("§c[BierSkyDrop] Kiste war kein Chest-Objekt im verzögerten Tick.");
                 }
-            }, 1L); // 1 Tick Verzögerung (ca 50ms)
+            }, 1L);
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
             block.getWorld().spawnParticle(Particle.EXPLOSION, block.getLocation().add(0.5, 0.5, 0.5), 1);
         }
     }
-            }
+}

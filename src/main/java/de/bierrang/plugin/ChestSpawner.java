@@ -13,6 +13,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -118,50 +119,71 @@ public class ChestSpawner {
             block.setType(Material.CHEST);
             
             final Block finalBlock = block;
+            final List<ItemStack> finalLoot = new ArrayList<>(loot); // Kopie erstellen
 
-            // SEHR WICHTIG: 10 Ticks warten und Debug-Logs
+            // 10 Ticks später: Items BRUTE FORCE einfügen
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    // 1. State holen
                     if (!(finalBlock.getState() instanceof Chest chest)) {
-                        plugin.getLogger().severe("DEBUG: KEINE Kiste gefunden!");
+                        plugin.getLogger().severe("KEINE Kiste!");
+                        safeDrop(finalBlock, finalLoot);
                         return;
                     }
 
-                    plugin.getLogger().info("DEBUG: Kiste gefunden. Füge Items ein...");
-
                     Inventory inv = chest.getBlockInventory();
-                    int added = 0;
-                    
-                    for (ItemStack item : loot) {
-                        if (item != null && item.getType() != Material.AIR) {
-                            // Items hinzufügen
-                            inv.addItem(item);
-                            added += item.getAmount();
+                    int slot = 0;
+                    int itemsSet = 0;
+
+                    // MANUELLES EINFÜGEN (Brute Force)
+                    for (ItemStack item : finalLoot) {
+                        if (item == null || item.getType() == Material.AIR) continue;
+                        
+                        // Suche freien Slot
+                        while (slot < inv.getSize()) {
+                            if (inv.getItem(slot) == null || inv.getItem(slot).getType() == Material.AIR) {
+                                inv.setItem(slot, item);
+                                itemsSet += item.getAmount();
+                                slot++;
+                                break; // Nächstes Item
+                            }
+                            slot++;
                         }
                     }
 
-                    // 2. WICHTIG: Speichern & Update senden
-                    boolean success = chest.update(true, false); // Force Update
+                    chest.update(true);
 
-                    // 3. Kontrolle: Stehen die Items wirklich drin?
+                    // KONTROLLE 1
                     int check = 0;
                     for (ItemStack i : inv.getContents()) {
                         if (i != null) check += i.getAmount();
                     }
 
-                    plugin.getLogger().info("DEBUG: Items hinzugefügt: " + added);
-                    plugin.getLogger().info("DEBUG: Update erfolgreich: " + success);
-                    plugin.getLogger().info("DEBUG: Items in Kiste (Check): " + check);
+                    plugin.getLogger().info("DEBUG BruteForce: " + check + " Items gesetzt.");
+
+                    if (check == 0) {
+                        // Letzter Rettungsanker: Droppen
+                        plugin.getLogger().warning("Inventar hat Items abgelehnt. Droppe sicherheitshalber.");
+                        safeDrop(finalBlock, finalLoot);
+                    }
 
                 } catch (Exception e) {
                     e.printStackTrace();
+                    safeDrop(finalBlock, finalLoot);
                 }
-            }, 10L); // 10 Ticks = 0.5 Sekunden
+            }, 10L);
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
             block.getWorld().spawnParticle(Particle.EXPLOSION, block.getLocation().add(0.5, 0.5, 0.5), 1);
         }
-    }
+
+        private void safeDrop(Block block, List<ItemStack> items) {
+            // Droppt Items, wenn Kiste buggt
+            for (ItemStack item : items) {
+                if (item != null && item.getType() != Material.AIR) {
+                    block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 1.0, 0.5), item);
                 }
+            }
+        }
+    }
+}

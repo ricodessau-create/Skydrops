@@ -14,9 +14,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
 public class ChestSpawner {
@@ -32,9 +30,6 @@ public class ChestSpawner {
             plugin.getLogger().warning("Spawn abgebrochen: Kein Loot vorhanden.");
             return;
         }
-        
-        // Debug: Was bekommt der Spawner wirklich?
-        plugin.getLogger().info("Spawne Kiste mit " + loot.size() + " Items.");
 
         Location startLoc = targetLoc.clone().add(0, 25, 0);
 
@@ -110,7 +105,6 @@ public class ChestSpawner {
             Location loc = targetLoc.clone();
             Block block = loc.getBlock();
 
-            // Platz finden
             if (block.getType().isSolid()) {
                 block = block.getLocation().add(0, 1, 0).getBlock();
             }
@@ -121,62 +115,55 @@ public class ChestSpawner {
                 attempts++;
             }
 
-            // Block setzen
             block.setType(Material.CHEST);
             
             final Block finalBlock = block;
             final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
-            // Sicherstellen, dass die TileEntity existiert
+            // FIX: Warten auf 5 Ticks (stable) und Items manuell setzen
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
+                    // STATE FORCE UPDATE
                     if (!(finalBlock.getState() instanceof Chest chest)) {
-                        plugin.getLogger().severe("Kiste konnte nicht erstellt werden (kein TileEntity). Droppe Items sicher.");
+                        plugin.getLogger().severe("Kiste ist kein TileEntity! Fallback Drop.");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
 
                     Inventory inv = chest.getBlockInventory();
-                    Map<Integer, ItemStack> failedItems = new HashMap<>();
+                    int slot = 0;
                     
-                    // Items hinzufügen und failedItems prüfen
+                    // Items manuell in Slots setzen statt addItem (stabiler in 1.21)
                     for (ItemStack item : finalLoot) {
                         if (item != null && item.getType() != Material.AIR) {
-                            // WICHTIG: clone(), um Referenzprobleme zu vermeiden
-                            ItemStack toAdd = item.clone();
-                            Map<Integer, ItemStack> leftover = inv.addItem(toAdd);
-                            if (!leftover.isEmpty()) {
-                                failedItems.putAll(leftover);
+                            if (slot < inv.getSize()) {
+                                inv.setItem(slot, item);
+                                slot++;
                             }
                         }
                     }
                     
-                    // Force Update für 1.21
+                    // Force Update
                     chest.update(true, true);
 
-                    // Check ob wirklich was drin ist
+                    // Check
                     int check = 0;
                     for (ItemStack i : inv.getContents()) {
                         if (i != null) check += i.getAmount();
                     }
 
                     if (check == 0) {
-                        plugin.getLogger().severe("Inventar ist nach addItem leer! Items defekt?");
+                        plugin.getLogger().severe("Inventar immer noch leer! Fallback Drop.");
                         safeDrop(finalBlock, finalLoot);
                     } else {
-                        plugin.getLogger().info("Kiste erfolgreich gefüllt mit " + check + " Items.");
-                        if (!failedItems.isEmpty()) {
-                            // Items die nicht reinpassten droppen
-                            safeDrop(finalBlock, new ArrayList<>(failedItems.values()));
-                        }
+                        plugin.getLogger().info("Kiste gefüllt mit " + check + " Items.");
                     }
 
                 } catch (Exception e) {
-                    plugin.getLogger().severe("Fehler beim Befüllen der Kiste: " + e.getMessage());
                     e.printStackTrace();
                     safeDrop(finalBlock, finalLoot);
                 }
-            }, 2L); // 2 Ticks warten
+            }, 5L); // 5 Ticks Verzögerung
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);

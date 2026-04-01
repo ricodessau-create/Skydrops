@@ -116,10 +116,13 @@ public class ChestSpawner {
 
             block.setType(Material.CHEST);
             
+            // FIX: Finale Kopie für Lambda erstellen
+            final Block finalBlock = block;
+
             // FIX NACH COPILOT ANALYSE:
             // 2 Ticks warten -> Inventar füllen -> Double Update (für Geyser/Bedrock)
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                Block b = block.getLocation().getBlock();
+                Block b = finalBlock.getLocation().getBlock();
 
                 if (!(b.getState() instanceof Chest chest)) {
                     plugin.getLogger().severe("[BierSkyDrop] Kiste nicht gefunden im Delay!");

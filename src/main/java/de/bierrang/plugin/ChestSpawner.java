@@ -30,6 +30,8 @@ public class ChestSpawner {
             plugin.getLogger().warning("Spawn abgebrochen: Kein Loot vorhanden.");
             return;
         }
+        
+        plugin.getLogger().info("Spawne Kiste mit " + loot.size() + " Items.");
 
         Location startLoc = targetLoc.clone().add(0, 25, 0);
 
@@ -115,55 +117,53 @@ public class ChestSpawner {
                 attempts++;
             }
 
-            block.setType(Material.CHEST);
-            
+            // --- WORKAROUND START ---
+            // 1. Kiste OHNE PHYSIK setzen. Das verhindert, dass Paper/Spigot die TileEntity
+            //    durch Neighbor-Updates zurücksetzt, während wir sie befüllen wollen.
+            block.setType(Material.CHEST, false);
+
             final Block finalBlock = block;
             final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
-            // FIX: Warten auf 5 Ticks (stable) und Items manuell setzen
+            // 2. Einen Tick warten, damit der Server die TileEntity sicher im Chunk verankert.
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    // STATE FORCE UPDATE
-                    if (!(finalBlock.getState() instanceof Chest chest)) {
+                    // 3. Den "Live"-State holen. 'false' sagt Paper: "Gib mir das echte Objekt, keinen Snapshot!"
+                    if (!(finalBlock.getState(false) instanceof Chest chest)) {
                         plugin.getLogger().severe("Kiste ist kein TileEntity! Fallback Drop.");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
 
                     Inventory inv = chest.getBlockInventory();
-                    int slot = 0;
                     
-                    // Items manuell in Slots setzen statt addItem (stabiler in 1.21)
-                    for (ItemStack item : finalLoot) {
-                        if (item != null && item.getType() != Material.AIR) {
-                            if (slot < inv.getSize()) {
-                                inv.setItem(slot, item);
-                                slot++;
-                            }
-                        }
-                    }
+                    // 4. Manuell setzen
+                    ItemStack[] items = finalLoot.toArray(new ItemStack[0]);
+                    inv.setContents(items);
                     
-                    // Force Update
+                    // 5. Update erzwingen (Synchronisation mit Client/Chunk)
                     chest.update(true, true);
 
-                    // Check
+                    // 6. Debug Check
                     int check = 0;
                     for (ItemStack i : inv.getContents()) {
                         if (i != null) check += i.getAmount();
                     }
 
                     if (check == 0) {
-                        plugin.getLogger().severe("Inventar immer noch leer! Fallback Drop.");
+                        plugin.getLogger().severe("Inventar immer noch leer! (Paper API Bug?) Fallback Drop.");
                         safeDrop(finalBlock, finalLoot);
                     } else {
-                        plugin.getLogger().info("Kiste gefüllt mit " + check + " Items.");
+                        plugin.getLogger().info("Kiste erfolgreich gefüllt mit " + check + " Items.");
                     }
 
                 } catch (Exception e) {
+                    plugin.getLogger().severe("Schwerer Fehler beim Befüllen: " + e.getMessage());
                     e.printStackTrace();
                     safeDrop(finalBlock, finalLoot);
                 }
-            }, 5L); // 5 Ticks Verzögerung
+            }, 1L); 
+            // --- WORKAROUND ENDE ---
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);

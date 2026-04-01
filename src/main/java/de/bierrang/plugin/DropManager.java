@@ -1,6 +1,5 @@
 package de.bierrang.plugin;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -35,14 +34,10 @@ public class DropManager {
     public void load() {
         itemPool.clear();
         
-        plugin.getLogger().info("==========================================");
-        plugin.getLogger().info("[BierSkyDrop] Starte Laden der Daten...");
-        plugin.getLogger().info("Datei existiert: " + dataFile.exists());
-        plugin.getLogger().info("Pfad: " + dataFile.getAbsolutePath());
-
+        // ... (Logging Kram kannst du behalten oder löschen) ...
+        
         List<?> list = dataConfig.getList("pool");
-        plugin.getLogger().info("Liste aus Config geholt: " + (list != null ? list.size() + " Einträge" : "NULL"));
-
+        
         if (list != null) {
             for (Object o : list) {
                 try {
@@ -50,40 +45,31 @@ public class DropManager {
 
                     if (o instanceof ItemStack stack) {
                         item = stack;
-                        plugin.getLogger().info(" - Item direkt gefunden: " + item.getType());
                     }
                     else if (o instanceof ConfigurationSection section) {
                         Map<String, Object> map = section.getValues(true);
                         item = ItemStack.deserialize(map);
-                        plugin.getLogger().info(" - Item aus Section geladen: " + (item != null ? item.getType() : "NULL"));
                     }
                     else if (o instanceof Map map) {
                         item = ItemStack.deserialize(map);
-                        plugin.getLogger().info(" - Item aus Map geladen: " + (item != null ? item.getType() : "NULL"));
-                    }
-                    else {
-                        plugin.getLogger().warning(" - Unbekanntes Objekt im Pool: " + o.getClass().getName());
                     }
 
-                    if (item != null && item.getType() != Material.AIR) {
+                    // VALIDIERUNG FÜR 1.21
+                    if (item != null && item.getType() != Material.AIR && item.getAmount() > 0) {
                         itemPool.add(item);
                     } else {
-                         plugin.getLogger().warning(" - Item war null oder AIR nach dem Laden!");
+                         plugin.getLogger().warning("Ungültiges Item im Pool gefunden (Air, Amount 0 oder null) - wird übersprungen.");
                     }
                 } catch (Exception e) {
-                    plugin.getLogger().severe("FEHLER beim Laden eines Items: " + e.getMessage());
-                    e.printStackTrace();
+                    plugin.getLogger().severe("Konnte Item nicht laden: " + e.getMessage());
+                    // Dies passiert oft bei alten NBT Daten in 1.21
                 }
             }
         }
-
-        plugin.getLogger().info("==========================================");
-        plugin.getLogger().info("§a[BierSkyDrop] §7Endgültig geladene Items im Pool: §e" + itemPool.size());
-        plugin.getLogger().info("==========================================");
-
+        
+        // Spieler Daten laden...
         weeklyDrops.clear();
         storedWeek.clear();
-
         if (dataConfig.isConfigurationSection("players")) {
             for (String key : dataConfig.getConfigurationSection("players").getKeys(false)) {
                 try {
@@ -96,7 +82,10 @@ public class DropManager {
             }
         }
     }
-
+    
+    // ... Rest der Klasse bleibt gleich (save, checkWeeklyReset, etc.) ...
+    // Achte darauf, dass save() existiert (siehe dein Code oben).
+    
     public void save() {
         dataConfig.set("pool", itemPool);
         dataConfig.set("players", null);
@@ -109,9 +98,7 @@ public class DropManager {
 
         try { 
             dataConfig.save(dataFile); 
-            plugin.getLogger().info("[BierSkyDrop] Daten gespeichert.");
         } catch (IOException e) { 
-            plugin.getLogger().severe("[BierSkyDrop] Konnte data.yml NICHT speichern!");
             e.printStackTrace(); 
         }
     }
@@ -119,11 +106,11 @@ public class DropManager {
     private int getCurrentWeek() {
         return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
-
+    
+    // ... Getter und generateLoot bleiben gleich ...
     public void checkWeeklyReset(UUID uuid, int maxDrops) {
         int currentWeek = getCurrentWeek();
         int savedWeek = storedWeek.getOrDefault(uuid, -1);
-
         if (savedWeek != currentWeek) {
             weeklyDrops.put(uuid, maxDrops);
             storedWeek.put(uuid, currentWeek);
@@ -131,14 +118,8 @@ public class DropManager {
         }
     }
 
-    public int getDrops(UUID uuid) {
-        return weeklyDrops.getOrDefault(uuid, 0);
-    }
-
-    public boolean hasDrops(UUID uuid) {
-        return getDrops(uuid) > 0;
-    }
-
+    public int getDrops(UUID uuid) { return weeklyDrops.getOrDefault(uuid, 0); }
+    public boolean hasDrops(UUID uuid) { return getDrops(uuid) > 0; }
     public void useDrop(UUID uuid) {
         int current = weeklyDrops.getOrDefault(uuid, 0);
         if (current > 0) {
@@ -146,30 +127,13 @@ public class DropManager {
             save();
         }
     }
-
     public List<ItemStack> getPool() { return itemPool; }
 
     public List<ItemStack> generateLoot() {
-        plugin.getLogger().info("--- GENERATE LOOT START ---");
-        plugin.getLogger().info("Pool Größe: " + itemPool.size());
+        if (itemPool.isEmpty()) return new ArrayList<>();
         
-        if (itemPool.isEmpty()) {
-            plugin.getLogger().warning("§c[BierSkyDrop] FEHLER: Pool ist leer beim Generieren!");
-            return new ArrayList<>();
-        }
-
         List<ItemStack> loot = new ArrayList<>();
-        List<ItemStack> poolCopy = new ArrayList<>();
-        
-        for (ItemStack item : itemPool) {
-            if (item != null && item.getType() != Material.AIR) poolCopy.add(item);
-        }
-        
-        if (poolCopy.isEmpty()) {
-             plugin.getLogger().warning("PoolCopy ist leer (Items waren null oder AIR?)");
-             return new ArrayList<>();
-        }
-
+        List<ItemStack> poolCopy = new ArrayList<>(itemPool);
         Collections.shuffle(poolCopy);
 
         boolean headUsed = false;
@@ -178,6 +142,9 @@ public class DropManager {
 
         for (ItemStack poolItem : poolCopy) {
             if (itemsGenerated >= 5) break;
+            
+            // Sicherheitscheck
+            if (poolItem == null || poolItem.getType() == Material.AIR) continue;
 
             boolean isHead = poolItem.getType() == Material.PLAYER_HEAD;
             if (isHead && headUsed) continue;
@@ -190,18 +157,8 @@ public class DropManager {
                 reward.setAmount(random.nextInt(5) + 1);
             }
             loot.add(reward);
-            plugin.getLogger().info("Loot hinzugefügt: " + reward.getType() + " x" + reward.getAmount());
             itemsGenerated++;
         }
-        
-        if (loot.isEmpty()) {
-            ItemStack fallback = poolCopy.get(0).clone();
-            fallback.setAmount(1);
-            loot.add(fallback);
-             plugin.getLogger().warning("Loot war leer, Fallback genutzt!");
-        }
-
-        plugin.getLogger().info("--- GENERATE LOOT ENDE: " + loot.size() + " Items ---");
         return loot;
     }
 }

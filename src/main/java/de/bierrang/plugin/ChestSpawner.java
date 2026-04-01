@@ -12,6 +12,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -116,25 +117,46 @@ public class ChestSpawner {
 
             block.setType(Material.CHEST);
             
-            // FIX: Wir erstellen eine finale Kopie für den Lambda-Ausdruck
-            final Block finalBlock = block;
+            // FIX: Location für später speichern
+            final Location chestLoc = block.getLocation();
 
-            // FIX FÜR BEDROCK: ITEMS 1 TICK SPÄTER EINFÜGEN
+            // FIX: 5 Ticks warten (0.25s) für Block-Entity Update
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (finalBlock.getState() instanceof Chest chest) {
-                    int itemCount = 0;
+                // Block NEU aus der Welt holen
+                Block currentBlock = chestLoc.getBlock();
+                
+                plugin.getLogger().info("Debug: Block an Ort: " + currentBlock.getType());
+
+                if (currentBlock.getState() instanceof Chest chest) {
+                    int addedCount = 0;
+                    int failedCount = 0;
+
                     for (ItemStack item : loot) {
                         if (item != null && item.getType() != Material.AIR) {
-                            chest.getBlockInventory().addItem(item);
-                            itemCount++;
-                        }
+                            // WICHTIG: Ergebnis von addItem prüfen
+                            HashMap<Integer, ItemStack> failed = chest.getBlockInventory().addItem(item);
+                            
+                            if (failed.isEmpty()) {
+                                addedCount += item.getAmount();
+                            } else {
+                                failedCount++;
+                                // Wenn Inventar voll oder Fehler -> Drop auf Boden
+                                currentBlock.getWorld().dropItemNaturally(currentBlock.getLocation().add(0.5, 1.2, 0.5), item);
+                                plugin.getLogger().warning("Item passte nicht in Kiste, gedroppt: " + item.getType());
+                            }
                     }
-                    chest.update(true);
-                    plugin.getLogger().info("§a[BierSkyDrop] Kiste gefüllt (verzögert). Items: §e" + itemCount);
+                    }
+                    
+                    chest.update(true); // Force Update
+                    plugin.getLogger().info("§a[BierSkyDrop] Inventory Update. Erfolgreich: " + addedCount + " | Fehlgeschlagen: " + failedCount);
                 } else {
-                     plugin.getLogger().severe("§c[BierSkyDrop] Kiste war kein Chest-Objekt im verzögerten Tick.");
+                    plugin.getLogger().severe("§c[BierSkyDrop] FEHLER: Block ist keine Kiste mehr! Typ: " + currentBlock.getType());
+                    // Fallback: Alles droppen
+                    for (ItemStack item : loot) {
+                        currentBlock.getWorld().dropItemNaturally(currentBlock.getLocation(), item);
+                    }
                 }
-            }, 1L);
+            }, 5L); // 5 Ticks Verzögerung
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);

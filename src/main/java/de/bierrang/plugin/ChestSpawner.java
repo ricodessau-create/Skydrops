@@ -121,22 +121,17 @@ public class ChestSpawner {
             final Block finalBlock = block;
             final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
-            // FIX FÜR ALTE VERSIONEN (OHNE getState(boolean))
-            // 1. Wir erzwingen die TileEntity Erstellung mit dem Standard getState()
+            // FIX: TileEntity erzwingen (Standard getState) + 2 Ticks warten
             try {
-                // Force creation
-                finalBlock.getState();
-                plugin.getLogger().info("DEBUG: TileEntity Erzwungen (Standard).");
+                finalBlock.getState(); 
             } catch (Exception e) {
                 e.printStackTrace();
             }
 
-            // 2. Einen Tick warten
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    // 3. Neu holen
                     if (!(finalBlock.getState() instanceof Chest chest)) {
-                        plugin.getLogger().severe("Kiste fehlt!");
+                        plugin.getLogger().severe("Kiste nicht gefunden!");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
@@ -150,14 +145,13 @@ public class ChestSpawner {
                     
                     chest.update(true);
 
-                    // Kontrolle
                     int check = 0;
                     for (ItemStack i : inv.getContents()) {
                         if (i != null) check += i.getAmount();
                     }
 
                     if (check == 0) {
-                        plugin.getLogger().warning("Inventar immer noch leer. Nutze Safe-Drop.");
+                        plugin.getLogger().warning("Inventar leer -> Safe Drop.");
                         safeDrop(finalBlock, finalLoot);
                     } else {
                         plugin.getLogger().info("§aErfolg! Items: " + check);
@@ -167,7 +161,7 @@ public class ChestSpawner {
                     e.printStackTrace();
                     safeDrop(finalBlock, finalLoot);
                 }
-            }, 2L); // 2 Ticks Sicherheit
+            }, 2L);
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
@@ -177,7 +171,10 @@ public class ChestSpawner {
         private void safeDrop(Block block, List<ItemStack> items) {
             for (ItemStack item : items) {
                 if (item != null && item.getType() != Material.AIR) {
-                    // Droppen im Block (unsichtbar, griefing-sicher)
+                    // Droppen im Block (unsichtbar, sicher)
                     block.getWorld().dropItem(block.getLocation().add(0.5, 0.5, 0.5), item);
                 }
             }
+        }
+    }
+}

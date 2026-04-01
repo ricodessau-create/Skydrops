@@ -79,7 +79,7 @@ public class ChestSpawner {
             newLoc.setY(currentY);
             
             double shakeX = (random.nextDouble() - 0.5) * 0.05;
-            double shakeZ = (random.nextDouble() - 0.5) * 0.05;
+            double shakeZ = (Math.random() - 0.5) * 0.05;
             newLoc.add(shakeX, 0, shakeZ);
             
             stand.teleport(newLoc);
@@ -116,17 +116,29 @@ public class ChestSpawner {
                 attempts++;
             }
 
+            // --- DER FIX (LAZY INITIALIZATION)! ---
+            
+            // 1. Block setzen
             block.setType(Material.CHEST);
             
             final Block finalBlock = block;
             final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
+            // 2. TileEntity ERZWINGEN (Das ist der magische Trick!)
+            // getState(true) weckt die TileEntity auf!
+            try {
+                finalBlock.getState(true);
+                plugin.getLogger().info("DEBUG: TileEntity erzwungen!");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            // 3. Einen Tick warten, damit das Inventar initialisiert wird
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    // FIX von vcs2: getState(false) für den LIVE-Zustand, kein Snapshot!
-                    // Das gibt uns direkten Zugriff auf das echte TileEntity.
+                    // 4. JETZT den Live-State holen und füllen
                     if (!(finalBlock.getState(false) instanceof Chest chest)) {
-                        plugin.getLogger().severe("Konnte keine Live-Kiste finden.");
+                        plugin.getLogger().severe("Kiste konnte nicht initialisiert werden!");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
@@ -138,14 +150,13 @@ public class ChestSpawner {
                         }
                     }
                     
-                    // Kein chest.update() nötig, da wir den Live-State ändern!
-                    plugin.getLogger().info("§aItems in LIVE-Kiste eingefügt.");
+                    plugin.getLogger().info("§aItems erfolgreich in die Kiste gelegt! (Fix angewendet)");
 
                 } catch (Exception e) {
                     e.printStackTrace();
                     safeDrop(finalBlock, finalLoot);
                 }
-            }, 10L);
+            }, 1L); // Nur 1 Tick Verzögerung nötig!
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
@@ -160,4 +171,4 @@ public class ChestSpawner {
             }
         }
     }
-                }
+}

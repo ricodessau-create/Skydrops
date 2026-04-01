@@ -79,7 +79,7 @@ public class ChestSpawner {
             newLoc.setY(currentY);
             
             double shakeX = (random.nextDouble() - 0.5) * 0.05;
-            double shakeZ = (Math.random() - 0.5) * 0.05;
+            double shakeZ = (random.nextDouble() - 0.5) * 0.05;
             newLoc.add(shakeX, 0, shakeZ);
             
             stand.teleport(newLoc);
@@ -116,29 +116,27 @@ public class ChestSpawner {
                 attempts++;
             }
 
-            // --- DER FIX (LAZY INITIALIZATION)! ---
-            
-            // 1. Block setzen
             block.setType(Material.CHEST);
             
             final Block finalBlock = block;
             final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
-            // 2. TileEntity ERZWINGEN (Das ist der magische Trick!)
-            // getState(true) weckt die TileEntity auf!
+            // FIX FÜR ALTE VERSIONEN (OHNE getState(boolean))
+            // 1. Wir erzwingen die TileEntity Erstellung mit dem Standard getState()
             try {
-                finalBlock.getState(true);
-                plugin.getLogger().info("DEBUG: TileEntity erzwungen!");
+                // Force creation
+                finalBlock.getState();
+                plugin.getLogger().info("DEBUG: TileEntity Erzwungen (Standard).");
             } catch (Exception e) {
                 e.printStackTrace();
             }
 
-            // 3. Einen Tick warten, damit das Inventar initialisiert wird
+            // 2. Einen Tick warten
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    // 4. JETZT den Live-State holen und füllen
-                    if (!(finalBlock.getState(false) instanceof Chest chest)) {
-                        plugin.getLogger().severe("Kiste konnte nicht initialisiert werden!");
+                    // 3. Neu holen
+                    if (!(finalBlock.getState() instanceof Chest chest)) {
+                        plugin.getLogger().severe("Kiste fehlt!");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
@@ -150,13 +148,26 @@ public class ChestSpawner {
                         }
                     }
                     
-                    plugin.getLogger().info("§aItems erfolgreich in die Kiste gelegt! (Fix angewendet)");
+                    chest.update(true);
+
+                    // Kontrolle
+                    int check = 0;
+                    for (ItemStack i : inv.getContents()) {
+                        if (i != null) check += i.getAmount();
+                    }
+
+                    if (check == 0) {
+                        plugin.getLogger().warning("Inventar immer noch leer. Nutze Safe-Drop.");
+                        safeDrop(finalBlock, finalLoot);
+                    } else {
+                        plugin.getLogger().info("§aErfolg! Items: " + check);
+                    }
 
                 } catch (Exception e) {
                     e.printStackTrace();
                     safeDrop(finalBlock, finalLoot);
                 }
-            }, 1L); // Nur 1 Tick Verzögerung nötig!
+            }, 2L); // 2 Ticks Sicherheit
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
@@ -166,9 +177,7 @@ public class ChestSpawner {
         private void safeDrop(Block block, List<ItemStack> items) {
             for (ItemStack item : items) {
                 if (item != null && item.getType() != Material.AIR) {
-                    block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 1.0, 0.5), item);
+                    // Droppen im Block (unsichtbar, griefing-sicher)
+                    block.getWorld().dropItem(block.getLocation().add(0.5, 0.5, 0.5), item);
                 }
             }
-        }
-    }
-}

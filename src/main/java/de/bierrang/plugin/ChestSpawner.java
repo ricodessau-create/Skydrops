@@ -119,52 +119,27 @@ public class ChestSpawner {
             block.setType(Material.CHEST);
             
             final Block finalBlock = block;
-            final List<ItemStack> finalLoot = new ArrayList<>(loot); // Kopie erstellen
+            final List<ItemStack> finalLoot = new ArrayList<>(loot);
 
-            // 10 Ticks später: Items BRUTE FORCE einfügen
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
-                    if (!(finalBlock.getState() instanceof Chest chest)) {
-                        plugin.getLogger().severe("KEINE Kiste!");
+                    // FIX von vcs2: getState(false) für den LIVE-Zustand, kein Snapshot!
+                    // Das gibt uns direkten Zugriff auf das echte TileEntity.
+                    if (!(finalBlock.getState(false) instanceof Chest chest)) {
+                        plugin.getLogger().severe("Konnte keine Live-Kiste finden.");
                         safeDrop(finalBlock, finalLoot);
                         return;
                     }
 
                     Inventory inv = chest.getBlockInventory();
-                    int slot = 0;
-                    int itemsSet = 0;
-
-                    // MANUELLES EINFÜGEN (Brute Force)
                     for (ItemStack item : finalLoot) {
-                        if (item == null || item.getType() == Material.AIR) continue;
-                        
-                        // Suche freien Slot
-                        while (slot < inv.getSize()) {
-                            if (inv.getItem(slot) == null || inv.getItem(slot).getType() == Material.AIR) {
-                                inv.setItem(slot, item);
-                                itemsSet += item.getAmount();
-                                slot++;
-                                break; // Nächstes Item
-                            }
-                            slot++;
+                        if (item != null && item.getType() != Material.AIR) {
+                            inv.addItem(item);
                         }
                     }
-
-                    chest.update(true);
-
-                    // KONTROLLE 1
-                    int check = 0;
-                    for (ItemStack i : inv.getContents()) {
-                        if (i != null) check += i.getAmount();
-                    }
-
-                    plugin.getLogger().info("DEBUG BruteForce: " + check + " Items gesetzt.");
-
-                    if (check == 0) {
-                        // Letzter Rettungsanker: Droppen
-                        plugin.getLogger().warning("Inventar hat Items abgelehnt. Droppe sicherheitshalber.");
-                        safeDrop(finalBlock, finalLoot);
-                    }
+                    
+                    // Kein chest.update() nötig, da wir den Live-State ändern!
+                    plugin.getLogger().info("§aItems in LIVE-Kiste eingefügt.");
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -178,7 +153,6 @@ public class ChestSpawner {
         }
 
         private void safeDrop(Block block, List<ItemStack> items) {
-            // Droppt Items, wenn Kiste buggt
             for (ItemStack item : items) {
                 if (item != null && item.getType() != Material.AIR) {
                     block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 1.0, 0.5), item);
@@ -186,4 +160,4 @@ public class ChestSpawner {
             }
         }
     }
-}
+                }

@@ -1,5 +1,6 @@
 package de.bierrang.plugin;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -21,6 +22,9 @@ public class DropManager {
     private final List<ItemStack> itemPool = new ArrayList<>();
     private final Map<UUID, Integer> weeklyDrops = new HashMap<>();
     private final Map<UUID, Integer> storedWeek = new HashMap<>();
+    
+    // NEU: Speichert, welche "Limitierten Items" ein Spieler schon bekommen hat (z.B. BEACON)
+    private final Map<UUID, Set<Material>> receivedRareItems = new HashMap<>();
 
     public DropManager(BierSkyDrop plugin) {
         this.plugin = plugin;
@@ -33,43 +37,30 @@ public class DropManager {
 
     public void load() {
         itemPool.clear();
-        
-        // ... (Logging Kram kannst du behalten oder löschen) ...
-        
+        weeklyDrops.clear();
+        storedWeek.clear();
+        receivedRareItems.clear();
+
+        // Pool laden
         List<?> list = dataConfig.getList("pool");
-        
         if (list != null) {
             for (Object o : list) {
                 try {
                     ItemStack item = null;
+                    if (o instanceof ItemStack stack) item = stack;
+                    else if (o instanceof ConfigurationSection section) item = ItemStack.deserialize(section.getValues(true));
+                    else if (o instanceof Map map) item = ItemStack.deserialize(map);
 
-                    if (o instanceof ItemStack stack) {
-                        item = stack;
-                    }
-                    else if (o instanceof ConfigurationSection section) {
-                        Map<String, Object> map = section.getValues(true);
-                        item = ItemStack.deserialize(map);
-                    }
-                    else if (o instanceof Map map) {
-                        item = ItemStack.deserialize(map);
-                    }
-
-                    // VALIDIERUNG FÜR 1.21
                     if (item != null && item.getType() != Material.AIR && item.getAmount() > 0) {
                         itemPool.add(item);
-                    } else {
-                         plugin.getLogger().warning("Ungültiges Item im Pool gefunden (Air, Amount 0 oder null) - wird übersprungen.");
                     }
                 } catch (Exception e) {
-                    plugin.getLogger().severe("Konnte Item nicht laden: " + e.getMessage());
-                    // Dies passiert oft bei alten NBT Daten in 1.21
+                    plugin.getLogger().severe("Fehler beim Laden eines Pool-Items: " + e.getMessage());
                 }
             }
         }
-        
-        // Spieler Daten laden...
-        weeklyDrops.clear();
-        storedWeek.clear();
+
+        // Spieler Daten laden
         if (dataConfig.isConfigurationSection("players")) {
             for (String key : dataConfig.getConfigurationSection("players").getKeys(false)) {
                 try {
@@ -78,44 +69,68 @@ public class DropManager {
                     int week = dataConfig.getInt("players." + key + ".week", getCurrentWeek());
                     weeklyDrops.put(uuid, drops);
                     storedWeek.put(uuid, week);
+                    
+                    // NEU: Laden der erhaltenen Rare-Items
+                    List<String> rareList = dataConfig.getStringList("players." + key + ".rareItems");
+                    Set<Material> rares = new HashSet<>();
+                    for (String matName : rareList) {
+                        try { rares.add(Material.valueOf(matName)); } catch (Exception ignored) {}
+                    }
+                    receivedRareItems.put(uuid, rares);
+                    
                 } catch (IllegalArgumentException ignored) {}
             }
         }
     }
-    
-    // ... Rest der Klasse bleibt gleich (save, checkWeeklyReset, etc.) ...
-    // Achte darauf, dass save() existiert (siehe dein Code oben).
-    
+
     public void save() {
         dataConfig.set("pool", itemPool);
         dataConfig.set("players", null);
-        
+
         for (UUID uuid : weeklyDrops.keySet()) {
             String base = "players." + uuid.toString();
             dataConfig.set(base + ".drops", weeklyDrops.get(uuid));
             dataConfig.set(base + ".week", storedWeek.get(uuid));
+            
+            // NEU: Speichern der Rare-Items
+            Set<Material> rares = receivedRareItems.get(uuid);
+            if (rares != null) {
+                List<String> rareNames = new ArrayList<>();
+                for (Material m : rares) rareNames.add(m.name());
+                dataConfig.set(base + ".rareItems", rareNames);
+            }
         }
 
-        try { 
-            dataConfig.save(dataFile); 
-        } catch (IOException e) { 
-            e.printStackTrace(); 
-        }
+        try { dataConfig.save(dataFile); } 
+        catch (IOException e) { e.printStackTrace(); }
     }
 
     private int getCurrentWeek() {
         return LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
     }
-    
-    // ... Getter und generateLoot bleiben gleich ...
+
     public void checkWeeklyReset(UUID uuid, int maxDrops) {
         int currentWeek = getCurrentWeek();
         int savedWeek = storedWeek.getOrDefault(uuid, -1);
+
         if (savedWeek != currentWeek) {
             weeklyDrops.put(uuid, maxDrops);
             storedWeek.put(uuid, currentWeek);
+            // NEU: Wochenreset löscht auch die erhaltenen Rare-Items
+            receivedRareItems.put(uuid, new HashSet<>());
             save();
         }
+    }
+    
+    // NEU: Prüfen ob Spieler dieses Item schon hatte
+    public boolean hasReceivedRareItem(UUID uuid, Material mat) {
+        return receivedRareItems.getOrDefault(uuid, new HashSet<>()).contains(mat);
+    }
+    
+    // NEU: Item als erhalten markieren
+    public void addRareItemReceived(UUID uuid, Material mat) {
+        receivedRareItems.computeIfAbsent(uuid, k -> new HashSet<>()).add(mat);
+        save();
     }
 
     public int getDrops(UUID uuid) { return weeklyDrops.getOrDefault(uuid, 0); }
@@ -129,36 +144,67 @@ public class DropManager {
     }
     public List<ItemStack> getPool() { return itemPool; }
 
-    public List<ItemStack> generateLoot() {
+    // NEU: generateLoot mit UUID für Limitierung
+    public List<ItemStack> generateLoot(UUID playerUUID) {
         if (itemPool.isEmpty()) return new ArrayList<>();
-        
+
         List<ItemStack> loot = new ArrayList<>();
         List<ItemStack> poolCopy = new ArrayList<>(itemPool);
         Collections.shuffle(poolCopy);
 
         boolean headUsed = false;
+        boolean beaconUsed = false; // Wir erlauben nur 1 Beacon pro Drop, zusätzlich zur Wochenlimitierung
         int itemsGenerated = 0;
         Random random = new Random();
 
+        // Temporäre Liste für mögliche Items
+        List<ItemStack> possibleRewards = new ArrayList<>();
+
+        // Erstmal schauen, was möglich ist
         for (ItemStack poolItem : poolCopy) {
+             if (poolItem != null && poolItem.getType() != Material.AIR) {
+                 possibleRewards.add(poolItem);
+             }
+        }
+
+        // Mischen für Zufall
+        Collections.shuffle(possibleRewards);
+
+        for (ItemStack poolItem : possibleRewards) {
             if (itemsGenerated >= 5) break;
-            
-            // Sicherheitscheck
-            if (poolItem == null || poolItem.getType() == Material.AIR) continue;
 
-            boolean isHead = poolItem.getType() == Material.PLAYER_HEAD;
-            if (isHead && headUsed) continue;
+            Material mat = poolItem.getType();
 
+            // Kopf Limitierung (nur 1 pro Drop)
+            if (mat == Material.PLAYER_HEAD && headUsed) continue;
+
+            // Beacon Limitierung (Wochenlimit & 1 pro Drop)
+            if (mat == Material.BEACON) {
+                if (beaconUsed) continue; // Schon einen Beacon im aktuellen Drop generiert?
+                if (hasReceivedRareItem(playerUUID, Material.BEACON)) {
+                    // Spieler hat diese Woche schon einen Beacon -> Überspringen
+                    continue;
+                }
+            }
+
+            // Item erstellen
             ItemStack reward = poolItem.clone();
-            if (isHead) {
+            if (mat == Material.PLAYER_HEAD) {
                 reward.setAmount(1);
                 headUsed = true;
+            } else if (mat == Material.BEACON) {
+                reward.setAmount(1);
+                beaconUsed = true;
+                // Als erhalten markieren
+                addRareItemReceived(playerUUID, Material.BEACON);
             } else {
                 reward.setAmount(random.nextInt(5) + 1);
             }
+            
             loot.add(reward);
             itemsGenerated++;
         }
+
         return loot;
     }
 }

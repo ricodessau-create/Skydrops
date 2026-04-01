@@ -12,7 +12,6 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -117,46 +116,32 @@ public class ChestSpawner {
 
             block.setType(Material.CHEST);
             
-            // FIX: Location für später speichern
-            final Location chestLoc = block.getLocation();
-
-            // FIX: 5 Ticks warten (0.25s) für Block-Entity Update
+            // FIX NACH COPILOT ANALYSE:
+            // 2 Ticks warten -> Inventar füllen -> Double Update (für Geyser/Bedrock)
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                // Block NEU aus der Welt holen
-                Block currentBlock = chestLoc.getBlock();
-                
-                plugin.getLogger().info("Debug: Block an Ort: " + currentBlock.getType());
+                Block b = block.getLocation().getBlock();
 
-                if (currentBlock.getState() instanceof Chest chest) {
-                    int addedCount = 0;
-                    int failedCount = 0;
+                if (!(b.getState() instanceof Chest chest)) {
+                    plugin.getLogger().severe("[BierSkyDrop] Kiste nicht gefunden im Delay!");
+                    return;
+                }
 
-                    for (ItemStack item : loot) {
-                        if (item != null && item.getType() != Material.AIR) {
-                            // WICHTIG: Ergebnis von addItem prüfen
-                            HashMap<Integer, ItemStack> failed = chest.getBlockInventory().addItem(item);
-                            
-                            if (failed.isEmpty()) {
-                                addedCount += item.getAmount();
-                            } else {
-                                failedCount++;
-                                // Wenn Inventar voll oder Fehler -> Drop auf Boden
-                                currentBlock.getWorld().dropItemNaturally(currentBlock.getLocation().add(0.5, 1.2, 0.5), item);
-                                plugin.getLogger().warning("Item passte nicht in Kiste, gedroppt: " + item.getType());
-                            }
-                    }
-                    }
-                    
-                    chest.update(true); // Force Update
-                    plugin.getLogger().info("§a[BierSkyDrop] Inventory Update. Erfolgreich: " + addedCount + " | Fehlgeschlagen: " + failedCount);
-                } else {
-                    plugin.getLogger().severe("§c[BierSkyDrop] FEHLER: Block ist keine Kiste mehr! Typ: " + currentBlock.getType());
-                    // Fallback: Alles droppen
-                    for (ItemStack item : loot) {
-                        currentBlock.getWorld().dropItemNaturally(currentBlock.getLocation(), item);
+                // 1. Inventar füllen
+                for (ItemStack item : loot) {
+                    if (item != null && item.getType() != Material.AIR) {
+                        chest.getBlockInventory().addItem(item);
                     }
                 }
-            }, 5L); // 5 Ticks Verzögerung
+
+                // 2. Inventory Update senden
+                chest.update(true, false);
+
+                // 3. WICHTIG FÜR BEDROCK: Block State erneut senden
+                // Das zwingt den Client (Geyser), das TileEntity neu zu laden
+                b.getState().update(true, false);
+                
+                plugin.getLogger().info("§a[BierSkyDrop] Sync erzwungen (2 Ticks).");
+            }, 2L);
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);

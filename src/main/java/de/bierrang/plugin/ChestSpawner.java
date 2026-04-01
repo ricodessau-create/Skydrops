@@ -1,5 +1,6 @@
 package de.bierrang.plugin;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -114,24 +115,28 @@ public class ChestSpawner {
             }
 
             block.setType(Material.CHEST);
-
-            if (block.getState() instanceof Chest chest) {
-                int itemCount = 0;
-                for (ItemStack item : loot) {
-                    if (item != null && item.getType() != Material.AIR) {
-                        chest.getBlockInventory().addItem(item);
-                        itemCount++;
+            
+            // FIX FÜR BEDROCK: ITEMS 1 TICK SPÄTER EINFÜGEN
+            // Block setzen, 50ms warten, dann Items einfügen.
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (block.getState() instanceof Chest chest) {
+                    int itemCount = 0;
+                    for (ItemStack item : loot) {
+                        if (item != null && item.getType() != Material.AIR) {
+                            chest.getBlockInventory().addItem(item);
+                            itemCount++;
+                        }
                     }
+                    chest.update(true);
+                    plugin.getLogger().info("§a[BierSkyDrop] Kiste gefüllt (verzögert). Items: §e" + itemCount);
+                } else {
+                     plugin.getLogger().severe("§c[BierSkyDrop] Kiste war kein Chest-Objekt im verzögerten Tick.");
                 }
-                chest.update(true);
-                plugin.getLogger().info("§a[BierSkyDrop] Kiste platziert. Items reingelegt: §e" + itemCount);
-            } else {
-                plugin.getLogger().severe("§c[BierSkyDrop] FEHLER: Konnte Kiste nicht initialisieren.");
-            }
+            }, 1L); // 1 Tick Verzögerung (ca 50ms)
 
             block.getWorld().playSound(block.getLocation(), Sound.BLOCK_WOOD_PLACE, 2, 0.8f);
             block.getWorld().spawnParticle(Particle.CLOUD, block.getLocation().add(0.5, 0.5, 0.5), 20, 0.3, 0.2, 0.3, 0.05);
             block.getWorld().spawnParticle(Particle.EXPLOSION, block.getLocation().add(0.5, 0.5, 0.5), 1);
         }
     }
-}
+            }
